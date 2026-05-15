@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stock-Ping</title>
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark bg-dark px-3">
+    <span class="navbar-brand">📈 Stock-Ping</span>
+    <div class="d-flex align-items-center gap-3">
+        <small id="lastUpdated" class="text-secondary"></small>
+        <button class="btn btn-outline-light btn-sm"
+            data-bs-toggle="modal" data-bs-target="#settingsModal">
+            ⚙ Settings
+        </button>
+    </div>
+</nav>
+
+<!-- Phone setup banner -->
+<div id="setupBanner" class="alert alert-warning alert-dismissible m-3 mb-0 d-none" role="alert">
+    <strong>Phone notifications not configured.</strong>
+    Open <strong>Settings</strong> to enter your ntfy topic and receive alerts on your phone.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+
+<!-- Toast container -->
+<div id="toastContainer"
+    class="toast-container position-fixed bottom-0 end-0 p-3"
+    style="z-index:1100"></div>
+
+<!-- Main content -->
+<div class="container-fluid px-4 py-4">
+    <div class="row g-4">
+
+        <!-- Watchlist -->
+        <div class="col-xl-7">
+            <div class="card">
+                <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+                    <span>Watchlist</span>
+                    <input id="watchFilter" type="text"
+                        class="form-control form-control-sm bg-secondary text-white border-0"
+                        placeholder="Filter by symbol or name…">
+                </div>
+                <div class="card-body p-0">
+                    <!-- Add ticker row -->
+                    <div class="d-flex gap-2 p-3 border-bottom">
+                        <input id="symbolInput" type="text"
+                            class="form-control"
+                            placeholder="Enter ticker (e.g. WM, AAPL, TSLA)"
+                            autocomplete="off" spellcheck="false">
+                        <button id="addWatchBtn" class="btn btn-primary text-nowrap">
+                            Add to Watchlist
+                        </button>
+                    </div>
+                    <!-- Table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="watchlistTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Name</th>
+                                    <th>Price</th>
+                                    <th>Change</th>
+                                    <th>Alert</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="watchlistBody">
+                                <tr class="empty-row">
+                                    <td colspan="6">Add a ticker above to get started.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Alerts -->
+        <div class="col-xl-5">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    Active Alerts
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="alertsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Target</th>
+                                    <th>Direction</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="alertsBody">
+                                <tr class="empty-row">
+                                    <td colspan="5">No alerts set yet.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- How it works card -->
+            <div class="card mt-4">
+                <div class="card-header bg-secondary text-white">How It Works</div>
+                <div class="card-body small text-muted">
+                    <ol class="mb-0 ps-3">
+                        <li>Add a stock ticker to your watchlist.</li>
+                        <li>Click <strong>Set Alert</strong> and choose a target price and direction.</li>
+                        <li>Stock-Ping checks prices every <strong>60 seconds</strong>.</li>
+                        <li>When your target is hit you'll hear a sound, see a Windows notification, and get a push on your phone.</li>
+                    </ol>
+                    <hr class="my-2">
+                    <strong>Phone setup:</strong> Install the free <em>ntfy</em> app on Android, tap +, and subscribe to your topic (configure in Settings).
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<footer>Prices refresh every 60 seconds · Data via Yahoo Finance · Notifications via ntfy.sh</footer>
+
+<!-- ── Set Alert Modal ─────────────────────────────────────────────────────── -->
+<div class="modal fade" id="alertModal" tabindex="-1" aria-labelledby="alertModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="alertModalLabel">
+                    Set Alert — <span id="alertModalSymbol" class="text-primary"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Target Price ($)</label>
+                    <input id="alertTargetPrice" type="number" step="0.01" min="0.01"
+                        class="form-control" placeholder="e.g. 215.00">
+                    <div class="invalid-feedback">Please enter a valid price.</div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold">Direction</label>
+                    <select id="alertDirection" class="form-select">
+                        <option value="below">▼ Below — notify when price drops to target</option>
+                        <option value="above">▲ Above — notify when price rises to target</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="saveAlertBtn" type="button" class="btn btn-success">Save Alert</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Settings Modal ─────────────────────────────────────────────────────── -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="settingsModalLabel">Settings — Phone Notifications</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label fw-semibold">ntfy Topic Name</label>
+                <input id="ntfyTopicInput" type="text" class="form-control mb-2"
+                    placeholder="e.g. my-stock-alerts-a7f3c2b9"
+                    autocomplete="off" spellcheck="false">
+                <div class="alert alert-info small mb-0">
+                    <strong>Setup steps:</strong>
+                    <ol class="mb-0 mt-1 ps-3">
+                        <li>Install the free <strong>ntfy</strong> app from the Play Store on your Pixel 8.</li>
+                        <li>Open the app and tap <strong>+</strong> to subscribe to a topic.</li>
+                        <li>Enter the <strong>same topic name</strong> you type above.</li>
+                        <li>Use a long unique name with random characters — topics are public on ntfy.sh.</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="saveConfigBtn" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/main.js"></script>
+</body>
+</html>
