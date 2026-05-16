@@ -23,7 +23,9 @@ body {
 #watchlistTable td,
 #watchlistTable th,
 #alertsTable td,
-#alertsTable th {
+#alertsTable th,
+#portfolioTable td,
+#portfolioTable th {
     vertical-align: middle;
 }
 
@@ -82,4 +84,65 @@ footer {
     color: #adb5bd;
     text-align: center;
     padding: 1.5rem 0 1rem;
+}
+
+/* Sortable column headers */
+th.sortable {
+    user-select: none;
+    white-space: nowrap;
+}
+
+th.sortable:hover {
+    background-color: #e9ecef;
+}
+
+.sort-icon {
+    font-size: 0.75em;
+    opacity: 0.8;
+}
+
+/* Chart modal */
+#chartModal .modal-content {
+    border: 1px solid #2d2d4e;
+}
+
+#chartModal .modal-header {
+    background: #16213e;
+}
+
+#chartModal .tf-btn {
+    color: #9ca3af;
+    border-color: #3d3d5e;
+}
+
+#chartModal .tf-btn.tf-active,
+#chartModal .tf-btn:hover {
+    background-color: #3d3d5e;
+    color: #fff;
+    border-color: #4d4d6e;
+}
+
+#chartModal .indicator-toggle {
+    opacity: 0.4;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+}
+
+#chartModal .indicator-toggle.active {
+    opacity: 1;
+}
+
+/* Portfolio summary cards */
+#portfolioSummaryRow .card {
+    background: #fff;
+}
+
+/* Nav tabs */
+#mainTabs .nav-link {
+    color: #495057;
+    font-weight: 500;
+}
+
+#mainTabs .nav-link.active {
+    font-weight: 700;
 }

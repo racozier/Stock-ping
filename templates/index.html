@@ -36,104 +36,239 @@
 
 <!-- Main content -->
 <div class="container-fluid px-4 py-4">
-    <div class="row g-4">
 
-        <!-- Watchlist -->
-        <div class="col-xl-7">
+    <!-- Main tabs -->
+    <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="watchlist-tab" data-bs-toggle="tab"
+                data-bs-target="#watchlistPane" type="button" role="tab">
+                Watchlist
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="portfolio-tab" data-bs-toggle="tab"
+                data-bs-target="#portfolioPane" type="button" role="tab">
+                Portfolio
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+
+        <!-- ── Watchlist Tab ─────────────────────────────────────────────────── -->
+        <div class="tab-pane fade show active" id="watchlistPane" role="tabpanel">
+            <div class="row g-4">
+
+                <!-- Watchlist card -->
+                <div class="col-xl-7">
+                    <div class="card">
+                        <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+                            <span>Watchlist</span>
+                            <input id="watchFilter" type="text"
+                                class="form-control form-control-sm bg-secondary text-white border-0"
+                                placeholder="Filter by symbol or name…">
+                        </div>
+                        <div class="card-body p-0">
+                            <!-- Add ticker row -->
+                            <div class="d-flex gap-2 p-3 border-bottom">
+                                <input id="symbolInput" type="text"
+                                    class="form-control"
+                                    placeholder="Enter ticker (e.g. WM, AAPL, TSLA)"
+                                    autocomplete="off" spellcheck="false">
+                                <button id="addWatchBtn" class="btn btn-primary text-nowrap">
+                                    Add to Watchlist
+                                </button>
+                            </div>
+                            <!-- Table -->
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0" id="watchlistTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="sortable" data-col="symbol">Symbol <span class="sort-icon"></span></th>
+                                            <th class="sortable" data-col="name">Name <span class="sort-icon"></span></th>
+                                            <th class="sortable" data-col="price">Price <span class="sort-icon"></span></th>
+                                            <th class="sortable" data-col="change_pct">Change % <span class="sort-icon"></span></th>
+                                            <th class="sortable" data-col="market_cap">Market Cap <span class="sort-icon"></span></th>
+                                            <th>Alert</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="watchlistBody">
+                                        <tr class="empty-row">
+                                            <td colspan="7">Add a ticker above to get started.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Alerts card -->
+                <div class="col-xl-5">
+                    <div class="card">
+                        <div class="card-header bg-dark text-white">
+                            Active Alerts
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0" id="alertsTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Symbol</th>
+                                            <th>Type</th>
+                                            <th>Target</th>
+                                            <th>Status</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="alertsBody">
+                                        <tr class="empty-row">
+                                            <td colspan="5">No alerts set yet.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- How it works card -->
+                    <div class="card mt-4">
+                        <div class="card-header bg-secondary text-white">How It Works</div>
+                        <div class="card-body small text-muted">
+                            <ol class="mb-0 ps-3">
+                                <li>Add a stock ticker to your watchlist.</li>
+                                <li>Click a row to view a live chart.</li>
+                                <li>Click <strong>Set Alert</strong> to choose price, % change, or technical alerts.</li>
+                                <li>Stock-Ping checks prices every <strong>60 seconds</strong>.</li>
+                                <li>When your target is hit you'll hear a sound, see a notification, and get a push on your phone.</li>
+                            </ol>
+                            <hr class="my-2">
+                            <strong>Phone setup:</strong> Install the free <em>ntfy</em> app, tap +, and subscribe to your topic (configure in Settings).
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div><!-- /watchlistPane -->
+
+        <!-- ── Portfolio Tab ─────────────────────────────────────────────────── -->
+        <div class="tab-pane fade" id="portfolioPane" role="tabpanel">
+            <!-- Summary cards -->
+            <div class="row g-3 mb-4" id="portfolioSummaryRow">
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card text-center p-3">
+                        <div class="text-muted small mb-1">Total Value</div>
+                        <div class="fs-4 fw-bold" id="ptTotalValue">—</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card text-center p-3">
+                        <div class="text-muted small mb-1">Total Gain/Loss</div>
+                        <div class="fs-4 fw-bold" id="ptTotalPnl">—</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card text-center p-3">
+                        <div class="text-muted small mb-1">Total Return</div>
+                        <div class="fs-4 fw-bold" id="ptTotalReturn">—</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card text-center p-3">
+                        <div class="text-muted small mb-1">Positions</div>
+                        <div class="fs-4 fw-bold" id="ptPositionCount">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Portfolio table card -->
             <div class="card">
                 <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
-                    <span>Watchlist</span>
-                    <input id="watchFilter" type="text"
-                        class="form-control form-control-sm bg-secondary text-white border-0"
-                        placeholder="Filter by symbol or name…">
+                    <span>Positions</span>
+                    <button class="btn btn-success btn-sm"
+                        data-bs-toggle="modal" data-bs-target="#portfolioModal">
+                        + Add Position
+                    </button>
                 </div>
                 <div class="card-body p-0">
-                    <!-- Add ticker row -->
-                    <div class="d-flex gap-2 p-3 border-bottom">
-                        <input id="symbolInput" type="text"
-                            class="form-control"
-                            placeholder="Enter ticker (e.g. WM, AAPL, TSLA)"
-                            autocomplete="off" spellcheck="false">
-                        <button id="addWatchBtn" class="btn btn-primary text-nowrap">
-                            Add to Watchlist
-                        </button>
-                    </div>
-                    <!-- Table -->
                     <div class="table-responsive">
-                        <table class="table table-hover mb-0" id="watchlistTable">
+                        <table class="table table-hover mb-0" id="portfolioTable">
                             <thead class="table-light">
                                 <tr>
                                     <th>Symbol</th>
                                     <th>Name</th>
-                                    <th>Price</th>
-                                    <th>Change</th>
-                                    <th>Alert</th>
+                                    <th>Shares</th>
+                                    <th>Avg Cost</th>
+                                    <th>Current Price</th>
+                                    <th>Current Value</th>
+                                    <th>P&amp;L ($)</th>
+                                    <th>P&amp;L (%)</th>
                                     <th></th>
                                 </tr>
                             </thead>
-                            <tbody id="watchlistBody">
+                            <tbody id="portfolioBody">
                                 <tr class="empty-row">
-                                    <td colspan="6">Add a ticker above to get started.</td>
+                                    <td colspan="9">No positions yet. Add one above.</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
-        </div>
+        </div><!-- /portfolioPane -->
 
-        <!-- Active Alerts -->
-        <div class="col-xl-5">
-            <div class="card">
-                <div class="card-header bg-dark text-white">
-                    Active Alerts
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0" id="alertsTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Symbol</th>
-                                    <th>Target</th>
-                                    <th>Direction</th>
-                                    <th>Status</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="alertsBody">
-                                <tr class="empty-row">
-                                    <td colspan="5">No alerts set yet.</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- How it works card -->
-            <div class="card mt-4">
-                <div class="card-header bg-secondary text-white">How It Works</div>
-                <div class="card-body small text-muted">
-                    <ol class="mb-0 ps-3">
-                        <li>Add a stock ticker to your watchlist.</li>
-                        <li>Click <strong>Set Alert</strong> and choose a target price and direction.</li>
-                        <li>Stock-Ping checks prices every <strong>60 seconds</strong>.</li>
-                        <li>When your target is hit you'll hear a sound, see a Windows notification, and get a push on your phone.</li>
-                    </ol>
-                    <hr class="my-2">
-                    <strong>Phone setup:</strong> Install the free <em>ntfy</em> app on Android, tap +, and subscribe to your topic (configure in Settings).
-                </div>
-            </div>
-        </div>
-
-    </div>
+    </div><!-- /tab-content -->
 </div>
 
 <footer>Prices refresh every 60 seconds · Data via Yahoo Finance · Notifications via ntfy.sh</footer>
 
+<!-- ── Chart Modal ─────────────────────────────────────────────────────────── -->
+<div class="modal fade" id="chartModal" tabindex="-1" aria-labelledby="chartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content" style="background:#1a1a2e; color:#d1d5db;">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="chartModalLabel" style="color:#d1d5db;">Chart</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Timeframe buttons -->
+                <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                    <div class="btn-group btn-group-sm me-3" id="tfButtons">
+                        <button class="btn btn-outline-secondary tf-btn" data-period="1d">1D</button>
+                        <button class="btn btn-outline-secondary tf-btn" data-period="5d">5D</button>
+                        <button class="btn btn-outline-secondary tf-btn active tf-active" data-period="1mo">1M</button>
+                        <button class="btn btn-outline-secondary tf-btn" data-period="3mo">3M</button>
+                        <button class="btn btn-outline-secondary tf-btn" data-period="6mo">6M</button>
+                        <button class="btn btn-outline-secondary tf-btn" data-period="1y">1Y</button>
+                    </div>
+                    <!-- Toggle buttons -->
+                    <button class="btn btn-sm btn-warning indicator-toggle active" data-indicator="ma20">MA20</button>
+                    <button class="btn btn-sm btn-primary indicator-toggle active" data-indicator="ma50">MA50</button>
+                    <button class="btn btn-sm btn-success indicator-toggle active" data-indicator="rsi">RSI</button>
+                    <button class="btn btn-sm btn-danger indicator-toggle active" data-indicator="macd">MACD</button>
+                </div>
+
+                <!-- Loading spinner -->
+                <div id="chartLoading" class="text-center py-5 d-none">
+                    <div class="spinner-border text-secondary" role="status"></div>
+                </div>
+                <div id="chartError" class="alert alert-danger d-none"></div>
+
+                <!-- Chart containers -->
+                <div id="chartWrap">
+                    <div id="priceChartDiv" style="height:380px; width:100%;"></div>
+                    <div id="rsiChartDiv" style="height:130px; width:100%; margin-top:4px;"></div>
+                    <div id="macdChartDiv" style="height:130px; width:100%; margin-top:4px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── Set Alert Modal ─────────────────────────────────────────────────────── -->
 <div class="modal fade" id="alertModal" tabindex="-1" aria-labelledby="alertModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-sm">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="alertModalLabel">
@@ -142,23 +277,122 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <!-- Alert type selector -->
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Target Price ($)</label>
-                    <input id="alertTargetPrice" type="number" step="0.01" min="0.01"
-                        class="form-control" placeholder="e.g. 215.00">
-                    <div class="invalid-feedback">Please enter a valid price.</div>
+                    <label class="form-label fw-semibold">Alert Type</label>
+                    <div class="btn-group w-100" role="group" id="alertTypeGroup">
+                        <input type="radio" class="btn-check" name="alertType" id="alertTypePrice" value="price" checked>
+                        <label class="btn btn-outline-primary" for="alertTypePrice">Price Target</label>
+
+                        <input type="radio" class="btn-check" name="alertType" id="alertTypePercent" value="percent">
+                        <label class="btn btn-outline-primary" for="alertTypePercent">% Change</label>
+
+                        <input type="radio" class="btn-check" name="alertType" id="alertTypeTech" value="technical">
+                        <label class="btn btn-outline-primary" for="alertTypeTech">Technical</label>
+                    </div>
                 </div>
-                <div class="mb-1">
-                    <label class="form-label fw-semibold">Direction</label>
-                    <select id="alertDirection" class="form-select">
-                        <option value="below">▼ Below — notify when price drops to target</option>
-                        <option value="above">▲ Above — notify when price rises to target</option>
-                    </select>
+
+                <!-- Price target fields -->
+                <div id="alertPriceFields">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Target Price ($)</label>
+                        <input id="alertTargetPrice" type="number" step="0.01" min="0.01"
+                            class="form-control" placeholder="e.g. 215.00">
+                        <div class="invalid-feedback">Please enter a valid price.</div>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold">Direction</label>
+                        <select id="alertDirection" class="form-select">
+                            <option value="below">▼ Below — notify when price drops to target</option>
+                            <option value="above">▲ Above — notify when price rises to target</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Percent change fields -->
+                <div id="alertPercentFields" class="d-none">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">% Change Threshold</label>
+                        <div class="input-group">
+                            <input id="alertPercentValue" type="number" step="0.1" min="0.1"
+                                class="form-control" placeholder="e.g. 5">
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <div class="invalid-feedback" id="alertPercentFeedback">Please enter a valid percentage.</div>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold">Direction</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="percentDir" id="percentDirAbove" value="above">
+                                <label class="form-check-label" for="percentDirAbove">▲ Above (price rises by %)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="percentDir" id="percentDirBelow" value="below" checked>
+                                <label class="form-check-label" for="percentDirBelow">▼ Below (price drops by %)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Technical indicator fields -->
+                <div id="alertTechFields" class="d-none">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Indicator</label>
+                        <select id="alertTechType" class="form-select">
+                            <option value="rsi_above">RSI Above threshold</option>
+                            <option value="rsi_below">RSI Below threshold</option>
+                            <option value="ma_cross_above">MA20 Crosses Above MA50 (Bullish)</option>
+                            <option value="ma_cross_below">MA20 Crosses Below MA50 (Bearish)</option>
+                        </select>
+                    </div>
+                    <div id="alertRsiThresholdWrap" class="mb-1">
+                        <label class="form-label fw-semibold">RSI Threshold</label>
+                        <input id="alertRsiThreshold" type="number" step="1" min="1" max="99"
+                            class="form-control" placeholder="e.g. 70" value="70">
+                        <div class="invalid-feedback" id="alertRsiFeedback">Please enter a value between 1 and 99.</div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button id="saveAlertBtn" type="button" class="btn btn-success">Save Alert</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Portfolio Add Position Modal ───────────────────────────────────────── -->
+<div class="modal fade" id="portfolioModal" tabindex="-1" aria-labelledby="portfolioModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="portfolioModalLabel">Add Position</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Symbol</label>
+                    <input id="ptSymbolInput" type="text" class="form-control"
+                        placeholder="e.g. AAPL" autocomplete="off" spellcheck="false">
+                    <div class="invalid-feedback" id="ptSymbolFeedback">Invalid symbol.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Shares</label>
+                    <input id="ptSharesInput" type="number" step="0.001" min="0.001"
+                        class="form-control" placeholder="e.g. 10">
+                    <div class="invalid-feedback">Enter a positive number of shares.</div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold">Avg Cost / Share ($)</label>
+                    <input id="ptAvgCostInput" type="number" step="0.01" min="0.01"
+                        class="form-control" placeholder="e.g. 150.00">
+                    <div class="invalid-feedback">Enter a positive cost.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="savePositionBtn" type="button" class="btn btn-success">Add Position</button>
             </div>
         </div>
     </div>
@@ -180,7 +414,7 @@
                 <div class="alert alert-info small mb-0">
                     <strong>Setup steps:</strong>
                     <ol class="mb-0 mt-1 ps-3">
-                        <li>Install the free <strong>ntfy</strong> app from the Play Store on your Pixel 8.</li>
+                        <li>Install the free <strong>ntfy</strong> app from the Play Store.</li>
                         <li>Open the app and tap <strong>+</strong> to subscribe to a topic.</li>
                         <li>Enter the <strong>same topic name</strong> you type above.</li>
                         <li>Use a long unique name with random characters — topics are public on ntfy.sh.</li>
@@ -196,6 +430,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="/static/js/main.js"></script>
 </body>
 </html>
