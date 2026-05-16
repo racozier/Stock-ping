@@ -104,6 +104,59 @@ def delete_alert(alert_id):
     return "", 204
 
 
+@app.route("/api/news")
+def get_news():
+    symbols_param = request.args.get("symbols", "")
+    symbols = [s.strip().upper() for s in symbols_param.split(",") if s.strip()]
+    if not symbols:
+        return jsonify([])
+
+    articles = []
+    seen = set()
+    for sym in symbols[:10]:  # cap at 10 symbols to avoid slow responses
+        try:
+            news = yf.Ticker(sym).news or []
+            for item in news[:8]:
+                # yfinance >=0.2.40 may nest content under a 'content' key
+                if "content" in item and isinstance(item["content"], dict):
+                    item = item["content"]
+                link = item.get("canonicalUrl", {}).get("url") or item.get("link", "")
+                title = item.get("title", "")
+                publisher = (
+                    item.get("provider", {}).get("displayName")
+                    or item.get("publisher", "")
+                )
+                pub_time = item.get("pubDate") or item.get("providerPublishTime")
+                if not title or not link or link in seen:
+                    continue
+                seen.add(link)
+                articles.append({
+                    "symbol": sym,
+                    "title": title,
+                    "publisher": publisher,
+                    "link": link,
+                    "published_at": pub_time,
+                })
+        except Exception:
+            continue
+
+    # sort newest-first when timestamps are integers (Unix) or ISO strings
+    def sort_key(a):
+        t = a.get("published_at")
+        if t is None:
+            return 0
+        if isinstance(t, (int, float)):
+            return t
+        try:
+            from datetime import timezone
+            return datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            return 0
+
+    articles.sort(key=sort_key, reverse=True)
+    return jsonify(articles[:30])
+
+
 @app.route("/api/config", methods=["GET"])
 def get_config():
     with config_lock:

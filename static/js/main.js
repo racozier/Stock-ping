@@ -268,10 +268,78 @@ async function saveConfig() {
     }
 }
 
+// ── News ──────────────────────────────────────────────────────────────────────
+
+async function refreshNews() {
+    const container = document.getElementById("newsList");
+    const status = document.getElementById("newsStatus");
+
+    if (watchlist.length === 0) {
+        container.innerHTML = `<div class="list-group-item text-muted fst-italic text-center py-3">Add stocks to your watchlist to see news.</div>`;
+        status.textContent = "";
+        return;
+    }
+
+    const symbols = watchlist.map(w => w.symbol).join(",");
+    let articles = [];
+    try {
+        const resp = await fetch(`/api/news?symbols=${symbols}`);
+        if (!resp.ok) throw new Error("bad response");
+        articles = await resp.json();
+    } catch (e) {
+        status.textContent = "News unavailable";
+        return;
+    }
+
+    if (articles.length === 0) {
+        container.innerHTML = `<div class="list-group-item text-muted fst-italic text-center py-3">No news found for your watchlist.</div>`;
+        status.textContent = "";
+        return;
+    }
+
+    container.innerHTML = "";
+    articles.forEach(a => {
+        const age = formatAge(a.published_at);
+        const item = document.createElement("div");
+        item.className = "list-group-item py-2 px-3";
+        item.innerHTML = `
+            <div class="d-flex align-items-start gap-2">
+                <span class="news-symbol flex-shrink-0 mt-1">${a.symbol}</span>
+                <div class="flex-grow-1 news-title">
+                    <a href="${a.link}" target="_blank" rel="noopener">${escapeHtml(a.title)}</a>
+                    <div class="news-meta mt-1">${escapeHtml(a.publisher || "")}${age ? " · " + age : ""}</div>
+                </div>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+    status.textContent = `${articles.length} article${articles.length !== 1 ? "s" : ""}`;
+}
+
+function formatAge(published_at) {
+    if (!published_at) return "";
+    let ts;
+    if (typeof published_at === "number") {
+        ts = published_at * 1000;
+    } else {
+        ts = Date.parse(published_at);
+    }
+    if (isNaN(ts)) return "";
+    const diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function refreshAll() {
-    await Promise.all([refreshWatchlist(), refreshAlerts()]);
+    await Promise.all([refreshWatchlist(), refreshAlerts(), refreshNews()]);
     document.getElementById("lastUpdated").textContent =
         "Last updated: " + new Date().toLocaleTimeString();
 }
