@@ -3,6 +3,7 @@ import uuid
 import threading
 from datetime import datetime
 
+import numpy as np
 import yfinance as yf
 from flask import Flask, request, jsonify, render_template
 from dotenv import load_dotenv
@@ -16,6 +17,100 @@ alerts_lock = threading.Lock()
 
 config = {"ntfy_topic": os.getenv("NTFY_TOPIC", "")}
 config_lock = threading.Lock()
+
+portfolio = {}
+portfolio_lock = threading.Lock()
+
+
+# ── Indicator helpers ──────────────────────────────────────────────────────────
+
+def _calc_sma(values, period):
+    """Return list of (index, sma) pairs where index >= period-1."""
+    result = []
+    arr = list(values)
+    for i in range(period - 1, len(arr)):
+        result.append(np.mean(arr[i - period + 1 : i + 1]))
+    return result
+
+
+def _calc_ema(values, period):
+    """Exponential moving average using standard multiplier."""
+    arr = np.array(values, dtype=float)
+    k = 2.0 / (period + 1)
+    ema = np.zeros(len(arr))
+    # seed with SMA
+    ema[period - 1] = np.mean(arr[:period])
+    for i in range(period, len(arr)):
+        ema[i] = arr[i] * k + ema[i - 1] * (1 - k)
+    return ema
+
+
+def _calc_rsi(closes, period=14):
+    """RSI using Wilder's smoothing. Returns array same length as closes (NaN for first period)."""
+    arr = np.array(closes, dtype=float)
+    deltas = np.diff(arr)
+    gains = np.where(deltas > 0, deltas, 0.0)
+    losses = np.where(deltas < 0, -deltas, 0.0)
+
+    rsi = np.full(len(arr), np.nan)
+    if len(gains) < period:
+        return rsi
+
+    avg_gain = np.mean(gains[:period])
+    avg_loss = np.mean(losses[:period])
+
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
+        rs = avg_gain / avg_loss if avg_loss != 0 else np.inf
+        idx = i + 1  # +1 because deltas is one shorter than arr
+        rsi[idx] = 100 - (100 / (1 + rs))
+
+    # fill the initial period point
+    rs0 = avg_gain / avg_loss if avg_loss != 0 else np.inf
+    rsi[period] = 100 - (100 / (1 + rs0))
+
+    return rsi
+
+
+def _calc_macd(closes, fast=12, slow=26, signal=9):
+    """Returns (macd_line, signal_line, histogram) arrays."""
+    arr = np.array(closes, dtype=float)
+    if len(arr) < slow:
+        empty = np.full(len(arr), np.nan)
+        return empty, empty, empty
+
+    ema_fast = _calc_ema(arr, fast)
+    ema_slow = _calc_ema(arr, slow)
+
+    macd_line = np.full(len(arr), np.nan)
+    # only meaningful from index slow-1 onward (where ema_slow is seeded)
+    macd_line[slow - 1:] = ema_fast[slow - 1:] - ema_slow[slow - 1:]
+
+    # signal EMA over valid macd values
+    valid_macd = macd_line[slow - 1:]
+    sig_arr = _calc_ema(valid_macd, signal)
+    signal_line = np.full(len(arr), np.nan)
+    signal_line[slow - 1:] = sig_arr
+
+    histogram = np.full(len(arr), np.nan)
+    histogram[slow - 1:] = macd_line[slow - 1:] - signal_line[slow - 1:]
+
+    return macd_line, signal_line, histogram
+
+
+# Period → interval mapping
+PERIOD_INTERVAL_MAP = {
+    "1d":  "5m",
+    "5d":  "15m",
+    "1mo": "1d",
+    "3mo": "1d",
+    "6mo": "1wk",
+    "1y":  "1wk",
+}
+
+INTRADAY_INTERVALS = {"5m", "15m"}
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -50,15 +145,107 @@ def get_quote():
                 name = ticker.info.get("shortName", sym)
             except Exception:
                 name = sym
+
+            # Market cap
+            market_cap = None
+            try:
+                mc = fi.market_cap
+                if mc is not None:
+                    market_cap = float(mc)
+            except Exception:
+                pass
+
             result[sym] = {
                 "price": round(price, 2),
                 "change_pct": round(change_pct, 2),
                 "name": name,
+                "market_cap": market_cap,
             }
         except Exception as e:
             result[sym] = {"error": str(e)}
 
     return jsonify(result)
+
+
+@app.route("/api/chart/<symbol>")
+def get_chart(symbol):
+    symbol = symbol.upper()
+    period = request.args.get("period", "1mo")
+    if period not in PERIOD_INTERVAL_MAP:
+        period = "1mo"
+    interval = PERIOD_INTERVAL_MAP[period]
+
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=period, interval=interval)
+        if hist.empty:
+            return jsonify({"error": "No data"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    is_intraday = interval in INTRADAY_INTERVALS
+
+    def fmt_time(ts):
+        if is_intraday:
+            return int(ts.timestamp())
+        return ts.strftime("%Y-%m-%d")
+
+    times = [fmt_time(ts) for ts in hist.index]
+    closes = hist["Close"].tolist()
+    n = len(closes)
+
+    candles = []
+    for i, ts in enumerate(hist.index):
+        candles.append({
+            "time": fmt_time(ts),
+            "open":   round(float(hist["Open"].iloc[i]), 4),
+            "high":   round(float(hist["High"].iloc[i]), 4),
+            "low":    round(float(hist["Low"].iloc[i]), 4),
+            "close":  round(float(closes[i]), 4),
+            "volume": int(hist["Volume"].iloc[i]),
+        })
+
+    # MA20
+    ma20_raw = _calc_sma(closes, 20)
+    ma20_offset = max(0, n - len(ma20_raw))
+    ma20 = [{"time": times[ma20_offset + i], "value": round(float(v), 4)}
+            for i, v in enumerate(ma20_raw)]
+
+    # MA50
+    ma50_raw = _calc_sma(closes, 50)
+    ma50_offset = max(0, n - len(ma50_raw))
+    ma50 = [{"time": times[ma50_offset + i], "value": round(float(v), 4)}
+            for i, v in enumerate(ma50_raw)]
+
+    # RSI
+    rsi_arr = _calc_rsi(closes, 14)
+    rsi = []
+    for i, v in enumerate(rsi_arr):
+        if not np.isnan(v):
+            rsi.append({"time": times[i], "value": round(float(v), 2)})
+
+    # MACD
+    macd_line, signal_line, histogram = _calc_macd(closes)
+    macd_out = []
+    sig_out = []
+    hist_out = []
+    for i in range(n):
+        if not np.isnan(macd_line[i]):
+            macd_out.append({"time": times[i], "value": round(float(macd_line[i]), 4)})
+            sig_out.append({"time": times[i], "value": round(float(signal_line[i]), 4)})
+            hist_out.append({"time": times[i], "value": round(float(histogram[i]), 4)})
+
+    return jsonify({
+        "candles": candles,
+        "ma20": ma20,
+        "ma50": ma50,
+        "rsi": rsi,
+        "macd": {
+            "macd": macd_out,
+            "signal": sig_out,
+            "histogram": hist_out,
+        },
+    })
 
 
 @app.route("/api/alerts", methods=["GET"])
@@ -71,24 +258,63 @@ def get_alerts():
 def create_alert():
     data = request.get_json(silent=True) or {}
     symbol = data.get("symbol", "").strip().upper()
-    direction = data.get("direction", "")
+    alert_type = data.get("type", "price")
 
-    try:
-        target_price = float(data.get("target_price", 0))
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid target_price"}), 400
-
-    if not symbol or target_price <= 0 or direction not in ("above", "below"):
-        return jsonify({"error": "Invalid input"}), 400
+    if not symbol:
+        return jsonify({"error": "Symbol required"}), 400
 
     alert = {
         "id": str(uuid.uuid4()),
         "symbol": symbol,
-        "target_price": target_price,
-        "direction": direction,
+        "type": alert_type,
         "status": "active",
         "created_at": datetime.utcnow().isoformat(),
     }
+
+    if alert_type == "price":
+        direction = data.get("direction", "")
+        try:
+            target_price = float(data.get("target_price", 0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid target_price"}), 400
+        if target_price <= 0 or direction not in ("above", "below"):
+            return jsonify({"error": "Invalid input"}), 400
+        alert["target_price"] = target_price
+        alert["direction"] = direction
+
+    elif alert_type == "percent":
+        direction = data.get("direction", "")
+        try:
+            percent = float(data.get("percent", 0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid percent"}), 400
+        if percent <= 0 or direction not in ("above", "below"):
+            return jsonify({"error": "Invalid input"}), 400
+        # Fetch current price as baseline
+        try:
+            fi = yf.Ticker(symbol).fast_info
+            baseline = fi.last_price
+            if baseline is None:
+                return jsonify({"error": "Cannot fetch current price for baseline"}), 400
+        except Exception as e:
+            return jsonify({"error": f"Price fetch failed: {e}"}), 400
+        alert["percent"] = percent
+        alert["direction"] = direction
+        alert["baseline_price"] = round(float(baseline), 4)
+
+    elif alert_type in ("rsi_above", "rsi_below"):
+        try:
+            rsi_threshold = float(data.get("rsi_threshold", 70 if alert_type == "rsi_above" else 30))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid rsi_threshold"}), 400
+        alert["rsi_threshold"] = rsi_threshold
+
+    elif alert_type in ("ma_cross_above", "ma_cross_below"):
+        pass  # no extra fields needed
+
+    else:
+        return jsonify({"error": f"Unknown alert type: {alert_type}"}), 400
+
     with alerts_lock:
         alerts.append(alert)
     return jsonify(alert), 201
@@ -117,6 +343,123 @@ def update_config():
     with config_lock:
         config["ntfy_topic"] = topic
     return jsonify({"ntfy_topic": topic})
+
+
+# ── Portfolio ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/portfolio", methods=["GET"])
+def get_portfolio():
+    with portfolio_lock:
+        positions = dict(portfolio)
+
+    if not positions:
+        return jsonify({"positions": [], "summary": {
+            "total_cost": 0, "total_value": 0,
+            "total_pnl": 0, "total_pnl_pct": 0,
+        }})
+
+    result_positions = []
+    total_cost = 0.0
+    total_value = 0.0
+
+    for sym, pos in positions.items():
+        try:
+            fi = yf.Ticker(sym).fast_info
+            current_price = fi.last_price or 0.0
+        except Exception:
+            current_price = 0.0
+
+        shares = pos["shares"]
+        avg_cost = pos["avg_cost"]
+        cost_basis = shares * avg_cost
+        current_val = shares * current_price
+        pnl = current_val - cost_basis
+        pnl_pct = (pnl / cost_basis * 100) if cost_basis else 0.0
+
+        total_cost += cost_basis
+        total_value += current_val
+
+        result_positions.append({
+            "symbol": sym,
+            "name": pos.get("name", sym),
+            "shares": shares,
+            "avg_cost": round(avg_cost, 4),
+            "current_price": round(current_price, 2),
+            "current_value": round(current_val, 2),
+            "pnl": round(pnl, 2),
+            "pnl_pct": round(pnl_pct, 2),
+        })
+
+    total_pnl = total_value - total_cost
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0.0
+
+    return jsonify({
+        "positions": result_positions,
+        "summary": {
+            "total_cost": round(total_cost, 2),
+            "total_value": round(total_value, 2),
+            "total_pnl": round(total_pnl, 2),
+            "total_pnl_pct": round(total_pnl_pct, 2),
+        },
+    })
+
+
+@app.route("/api/portfolio", methods=["POST"])
+def add_position():
+    data = request.get_json(silent=True) or {}
+    symbol = data.get("symbol", "").strip().upper()
+    try:
+        shares = float(data.get("shares", 0))
+        avg_cost = float(data.get("avg_cost", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid shares or avg_cost"}), 400
+
+    if not symbol or shares <= 0 or avg_cost <= 0:
+        return jsonify({"error": "Invalid input"}), 400
+
+    # Validate symbol
+    try:
+        ticker = yf.Ticker(symbol)
+        fi = ticker.fast_info
+        price = fi.last_price
+        if price is None:
+            return jsonify({"error": f"Cannot validate symbol: {symbol}"}), 400
+        try:
+            name = ticker.info.get("shortName", symbol)
+        except Exception:
+            name = symbol
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+    with portfolio_lock:
+        if symbol in portfolio:
+            # Weighted average cost
+            existing = portfolio[symbol]
+            total_shares = existing["shares"] + shares
+            new_avg = (existing["shares"] * existing["avg_cost"] + shares * avg_cost) / total_shares
+            portfolio[symbol] = {
+                "shares": total_shares,
+                "avg_cost": new_avg,
+                "name": name,
+            }
+        else:
+            portfolio[symbol] = {
+                "shares": shares,
+                "avg_cost": avg_cost,
+                "name": name,
+            }
+
+    return jsonify({"symbol": symbol, "shares": shares, "avg_cost": avg_cost}), 201
+
+
+@app.route("/api/portfolio/<symbol>", methods=["DELETE"])
+def remove_position(symbol):
+    symbol = symbol.upper()
+    with portfolio_lock:
+        if symbol not in portfolio:
+            return jsonify({"error": "Not found"}), 404
+        del portfolio[symbol]
+    return "", 204
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
