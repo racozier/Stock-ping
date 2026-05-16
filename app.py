@@ -92,7 +92,6 @@ def _calc_macd(closes, fast=12, slow=26, signal=9):
     return macd_line, signal_line, histogram
 
 
-# Period → interval mapping
 PERIOD_INTERVAL_MAP = {
     "1d":  "5m",
     "5d":  "15m",
@@ -136,7 +135,6 @@ def get_quote():
                 name = ticker.info.get("shortName", sym)
             except Exception:
                 name = sym
-
             market_cap = None
             try:
                 mc = fi.market_cap
@@ -144,7 +142,6 @@ def get_quote():
                     market_cap = float(mc)
             except Exception:
                 pass
-
             result[sym] = {
                 "price": round(price, 2),
                 "change_pct": round(change_pct, 2),
@@ -212,9 +209,7 @@ def get_chart(symbol):
             rsi.append({"time": times[i], "value": round(float(v), 2)})
 
     macd_line, signal_line, histogram = _calc_macd(closes)
-    macd_out = []
-    sig_out = []
-    hist_out = []
+    macd_out, sig_out, hist_out = [], [], []
     for i in range(n):
         if not np.isnan(macd_line[i]):
             macd_out.append({"time": times[i], "value": round(float(macd_line[i]), 4)})
@@ -222,15 +217,8 @@ def get_chart(symbol):
             hist_out.append({"time": times[i], "value": round(float(histogram[i]), 4)})
 
     return jsonify({
-        "candles": candles,
-        "ma20": ma20,
-        "ma50": ma50,
-        "rsi": rsi,
-        "macd": {
-            "macd": macd_out,
-            "signal": sig_out,
-            "histogram": hist_out,
-        },
+        "candles": candles, "ma20": ma20, "ma50": ma50, "rsi": rsi,
+        "macd": {"macd": macd_out, "signal": sig_out, "histogram": hist_out},
     })
 
 
@@ -245,18 +233,12 @@ def create_alert():
     data = request.get_json(silent=True) or {}
     symbol = data.get("symbol", "").strip().upper()
     alert_type = data.get("type", "price")
-
     if not symbol:
         return jsonify({"error": "Symbol required"}), 400
-
     alert = {
-        "id": str(uuid.uuid4()),
-        "symbol": symbol,
-        "type": alert_type,
-        "status": "active",
-        "created_at": datetime.utcnow().isoformat(),
+        "id": str(uuid.uuid4()), "symbol": symbol, "type": alert_type,
+        "status": "active", "created_at": datetime.utcnow().isoformat(),
     }
-
     if alert_type == "price":
         direction = data.get("direction", "")
         try:
@@ -267,7 +249,6 @@ def create_alert():
             return jsonify({"error": "Invalid input"}), 400
         alert["target_price"] = target_price
         alert["direction"] = direction
-
     elif alert_type == "percent":
         direction = data.get("direction", "")
         try:
@@ -286,20 +267,16 @@ def create_alert():
         alert["percent"] = percent
         alert["direction"] = direction
         alert["baseline_price"] = round(float(baseline), 4)
-
     elif alert_type in ("rsi_above", "rsi_below"):
         try:
             rsi_threshold = float(data.get("rsi_threshold", 70 if alert_type == "rsi_above" else 30))
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid rsi_threshold"}), 400
         alert["rsi_threshold"] = rsi_threshold
-
     elif alert_type in ("ma_cross_above", "ma_cross_below"):
         pass
-
     else:
         return jsonify({"error": f"Unknown alert type: {alert_type}"}), 400
-
     with alerts_lock:
         alerts.append(alert)
     return jsonify(alert), 201
@@ -336,57 +313,35 @@ def update_config():
 def get_portfolio():
     with portfolio_lock:
         positions = dict(portfolio)
-
     if not positions:
         return jsonify({"positions": [], "summary": {
-            "total_cost": 0, "total_value": 0,
-            "total_pnl": 0, "total_pnl_pct": 0,
+            "total_cost": 0, "total_value": 0, "total_pnl": 0, "total_pnl_pct": 0,
         }})
-
     result_positions = []
-    total_cost = 0.0
-    total_value = 0.0
-
+    total_cost = total_value = 0.0
     for sym, pos in positions.items():
         try:
-            fi = yf.Ticker(sym).fast_info
-            current_price = fi.last_price or 0.0
+            current_price = float(yf.Ticker(sym).fast_info.last_price or 0)
         except Exception:
             current_price = 0.0
-
-        shares = pos["shares"]
-        avg_cost = pos["avg_cost"]
+        shares, avg_cost = pos["shares"], pos["avg_cost"]
         cost_basis = shares * avg_cost
         current_val = shares * current_price
         pnl = current_val - cost_basis
         pnl_pct = (pnl / cost_basis * 100) if cost_basis else 0.0
-
         total_cost += cost_basis
         total_value += current_val
-
         result_positions.append({
-            "symbol": sym,
-            "name": pos.get("name", sym),
-            "shares": shares,
-            "avg_cost": round(avg_cost, 4),
-            "current_price": round(current_price, 2),
-            "current_value": round(current_val, 2),
-            "pnl": round(pnl, 2),
-            "pnl_pct": round(pnl_pct, 2),
+            "symbol": sym, "name": pos.get("name", sym), "shares": shares,
+            "avg_cost": round(avg_cost, 4), "current_price": round(current_price, 2),
+            "current_value": round(current_val, 2), "pnl": round(pnl, 2), "pnl_pct": round(pnl_pct, 2),
         })
-
     total_pnl = total_value - total_cost
     total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0.0
-
-    return jsonify({
-        "positions": result_positions,
-        "summary": {
-            "total_cost": round(total_cost, 2),
-            "total_value": round(total_value, 2),
-            "total_pnl": round(total_pnl, 2),
-            "total_pnl_pct": round(total_pnl_pct, 2),
-        },
-    })
+    return jsonify({"positions": result_positions, "summary": {
+        "total_cost": round(total_cost, 2), "total_value": round(total_value, 2),
+        "total_pnl": round(total_pnl, 2), "total_pnl_pct": round(total_pnl_pct, 2),
+    }})
 
 
 @app.route("/api/portfolio", methods=["POST"])
@@ -398,14 +353,11 @@ def add_position():
         avg_cost = float(data.get("avg_cost", 0))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid shares or avg_cost"}), 400
-
     if not symbol or shares <= 0 or avg_cost <= 0:
         return jsonify({"error": "Invalid input"}), 400
-
     try:
         ticker = yf.Ticker(symbol)
-        fi = ticker.fast_info
-        price = fi.last_price
+        price = ticker.fast_info.last_price
         if price is None:
             return jsonify({"error": f"Cannot validate symbol: {symbol}"}), 400
         try:
@@ -414,24 +366,14 @@ def add_position():
             name = symbol
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
     with portfolio_lock:
         if symbol in portfolio:
             existing = portfolio[symbol]
             total_shares = existing["shares"] + shares
             new_avg = (existing["shares"] * existing["avg_cost"] + shares * avg_cost) / total_shares
-            portfolio[symbol] = {
-                "shares": total_shares,
-                "avg_cost": new_avg,
-                "name": name,
-            }
+            portfolio[symbol] = {"shares": total_shares, "avg_cost": new_avg, "name": name}
         else:
-            portfolio[symbol] = {
-                "shares": shares,
-                "avg_cost": avg_cost,
-                "name": name,
-            }
-
+            portfolio[symbol] = {"shares": shares, "avg_cost": avg_cost, "name": name}
     return jsonify({"symbol": symbol, "shares": shares, "avg_cost": avg_cost}), 201
 
 
@@ -452,7 +394,6 @@ def _parse_symbols(args_str):
 
 
 def _parse_news_item(item, symbol):
-    """Handle both yfinance <1.x (old) and 1.x (new content-wrapped) formats."""
     if "content" in item:
         c = item["content"]
         title = c.get("title", "")
@@ -483,7 +424,6 @@ def _parse_news_item(item, symbol):
             if res.get("url"):
                 thumb = res["url"]
                 break
-
     if not title:
         return None
     return {"symbol": symbol, "title": title, "publisher": publisher,
@@ -495,18 +435,15 @@ def get_news():
     symbols = _parse_symbols(request.args.get("symbols", ""))
     if not symbols:
         return jsonify([])
-
     all_news = []
     for symbol in symbols[:15]:
         try:
-            ticker = yf.Ticker(symbol)
-            for item in (ticker.news or [])[:6]:
+            for item in (yf.Ticker(symbol).news or [])[:6]:
                 parsed = _parse_news_item(item, symbol)
                 if parsed:
                     all_news.append(parsed)
         except Exception:
             pass
-
     all_news.sort(key=lambda x: x["published_at"], reverse=True)
     return jsonify(all_news)
 
@@ -535,15 +472,13 @@ def get_earnings():
             eps_list = cal.get("EPS Estimate", [])
             rev_list = cal.get("Revenue Estimate", [])
             results.append({
-                "symbol": symbol,
-                "name": name,
+                "symbol": symbol, "name": name,
                 "earnings_date": dates[0].isoformat() if dates else None,
                 "eps_estimate": float(eps_list[0]) if eps_list and eps_list[0] is not None else None,
                 "revenue_estimate": float(rev_list[0]) if rev_list and rev_list[0] is not None else None,
             })
         except Exception:
             pass
-
     results.sort(key=lambda x: x["earnings_date"] or "9999")
     return jsonify(results)
 
@@ -562,16 +497,12 @@ def get_analyst():
             recent = df[df.index >= cutoff].head(8)
             for date, row in recent.iterrows():
                 results.append({
-                    "symbol": symbol,
-                    "date": date.strftime("%Y-%m-%d"),
-                    "firm": str(row.get("Firm", "")),
-                    "from_grade": str(row.get("FromGrade", "")),
-                    "to_grade": str(row.get("ToGrade", "")),
-                    "action": str(row.get("Action", "")),
+                    "symbol": symbol, "date": date.strftime("%Y-%m-%d"),
+                    "firm": str(row.get("Firm", "")), "from_grade": str(row.get("FromGrade", "")),
+                    "to_grade": str(row.get("ToGrade", "")), "action": str(row.get("Action", "")),
                 })
         except Exception:
             pass
-
     results.sort(key=lambda x: x["date"], reverse=True)
     return jsonify(results[:60])
 
@@ -590,17 +521,14 @@ def get_insider():
                 shares = row.get("Shares")
                 value = row.get("Value")
                 results.append({
-                    "symbol": symbol,
-                    "insider": str(row.get("Insider Trading", "")),
-                    "position": str(row.get("Position", "")),
-                    "date": str(row.get("Start Date", "")),
+                    "symbol": symbol, "insider": str(row.get("Insider Trading", "")),
+                    "position": str(row.get("Position", "")), "date": str(row.get("Start Date", "")),
                     "shares": int(shares) if shares is not None and str(shares) != 'nan' else None,
                     "value": float(value) if value is not None and str(value) != 'nan' else None,
                     "text": str(row.get("Text", "")),
                 })
         except Exception:
             pass
-
     return jsonify(results[:50])
 
 
@@ -624,19 +552,15 @@ def get_options_activity():
                     unusual = df[df["ratio"] > 1.5].nlargest(3, "volume")
                     for _, row in unusual.iterrows():
                         results.append({
-                            "symbol": symbol,
-                            "type": opt_type,
-                            "strike": float(row["strike"]),
-                            "expiry": expiry,
-                            "volume": int(row["volume"]),
-                            "open_interest": int(row["openInterest"]),
+                            "symbol": symbol, "type": opt_type,
+                            "strike": float(row["strike"]), "expiry": expiry,
+                            "volume": int(row["volume"]), "open_interest": int(row["openInterest"]),
                             "vol_oi_ratio": round(float(row["ratio"]), 1),
                             "last_price": float(row["lastPrice"]),
                             "implied_volatility": round(float(row.get("impliedVolatility", 0)) * 100, 1),
                         })
         except Exception:
             pass
-
     results.sort(key=lambda x: x["volume"], reverse=True)
     return jsonify(results[:30])
 
