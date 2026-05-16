@@ -24,10 +24,9 @@ portfolio = {}
 portfolio_lock = threading.Lock()
 
 
-# ── Indicator helpers ──────────────────────────────────────────────────────────
+# ── Indicator helpers ──────────────────────────────────────────────
 
 def _calc_sma(values, period):
-    """Return list of (index, sma) pairs where index >= period-1."""
     result = []
     arr = list(values)
     for i in range(period - 1, len(arr)):
@@ -36,11 +35,9 @@ def _calc_sma(values, period):
 
 
 def _calc_ema(values, period):
-    """Exponential moving average using standard multiplier."""
     arr = np.array(values, dtype=float)
     k = 2.0 / (period + 1)
     ema = np.zeros(len(arr))
-    # seed with SMA
     ema[period - 1] = np.mean(arr[:period])
     for i in range(period, len(arr)):
         ema[i] = arr[i] * k + ema[i - 1] * (1 - k)
@@ -48,7 +45,6 @@ def _calc_ema(values, period):
 
 
 def _calc_rsi(closes, period=14):
-    """RSI using Wilder's smoothing. Returns array same length as closes (NaN for first period)."""
     arr = np.array(closes, dtype=float)
     deltas = np.diff(arr)
     gains = np.where(deltas > 0, deltas, 0.0)
@@ -66,10 +62,9 @@ def _calc_rsi(closes, period=14):
         avg_loss = (avg_loss * (period - 1) + losses[i]) / period
 
         rs = avg_gain / avg_loss if avg_loss != 0 else np.inf
-        idx = i + 1  # +1 because deltas is one shorter than arr
+        idx = i + 1
         rsi[idx] = 100 - (100 / (1 + rs))
 
-    # fill the initial period point
     rs0 = avg_gain / avg_loss if avg_loss != 0 else np.inf
     rsi[period] = 100 - (100 / (1 + rs0))
 
@@ -77,7 +72,6 @@ def _calc_rsi(closes, period=14):
 
 
 def _calc_macd(closes, fast=12, slow=26, signal=9):
-    """Returns (macd_line, signal_line, histogram) arrays."""
     arr = np.array(closes, dtype=float)
     if len(arr) < slow:
         empty = np.full(len(arr), np.nan)
@@ -87,10 +81,8 @@ def _calc_macd(closes, fast=12, slow=26, signal=9):
     ema_slow = _calc_ema(arr, slow)
 
     macd_line = np.full(len(arr), np.nan)
-    # only meaningful from index slow-1 onward (where ema_slow is seeded)
     macd_line[slow - 1:] = ema_fast[slow - 1:] - ema_slow[slow - 1:]
 
-    # signal EMA over valid macd values
     valid_macd = macd_line[slow - 1:]
     sig_arr = _calc_ema(valid_macd, signal)
     signal_line = np.full(len(arr), np.nan)
@@ -142,13 +134,11 @@ def get_quote():
             change_pct = (
                 (price - prev_close) / prev_close * 100 if prev_close else 0
             )
-            # shortName only fetched here (on watchlist add); client caches it
             try:
                 name = ticker.info.get("shortName", sym)
             except Exception:
                 name = sym
 
-            # Market cap
             market_cap = None
             try:
                 mc = fi.market_cap
@@ -207,26 +197,22 @@ def get_chart(symbol):
             "volume": int(hist["Volume"].iloc[i]),
         })
 
-    # MA20
     ma20_raw = _calc_sma(closes, 20)
     ma20_offset = max(0, n - len(ma20_raw))
     ma20 = [{"time": times[ma20_offset + i], "value": round(float(v), 4)}
             for i, v in enumerate(ma20_raw)]
 
-    # MA50
     ma50_raw = _calc_sma(closes, 50)
     ma50_offset = max(0, n - len(ma50_raw))
     ma50 = [{"time": times[ma50_offset + i], "value": round(float(v), 4)}
             for i, v in enumerate(ma50_raw)]
 
-    # RSI
     rsi_arr = _calc_rsi(closes, 14)
     rsi = []
     for i, v in enumerate(rsi_arr):
         if not np.isnan(v):
             rsi.append({"time": times[i], "value": round(float(v), 2)})
 
-    # MACD
     macd_line, signal_line, histogram = _calc_macd(closes)
     macd_out = []
     sig_out = []
@@ -292,7 +278,6 @@ def create_alert():
             return jsonify({"error": "Invalid percent"}), 400
         if percent <= 0 or direction not in ("above", "below"):
             return jsonify({"error": "Invalid input"}), 400
-        # Fetch current price as baseline
         try:
             fi = yf.Ticker(symbol).fast_info
             baseline = fi.last_price
@@ -312,7 +297,7 @@ def create_alert():
         alert["rsi_threshold"] = rsi_threshold
 
     elif alert_type in ("ma_cross_above", "ma_cross_below"):
-        pass  # no extra fields needed
+        pass
 
     else:
         return jsonify({"error": f"Unknown alert type: {alert_type}"}), 400
@@ -347,7 +332,7 @@ def update_config():
     return jsonify({"ntfy_topic": topic})
 
 
-# ── Portfolio ─────────────────────────────────────────────────────────────────
+# ── Portfolio ───────────────────────────────────────────────────────────────────
 
 @app.route("/api/portfolio", methods=["GET"])
 def get_portfolio():
@@ -419,7 +404,6 @@ def add_position():
     if not symbol or shares <= 0 or avg_cost <= 0:
         return jsonify({"error": "Invalid input"}), 400
 
-    # Validate symbol
     try:
         ticker = yf.Ticker(symbol)
         fi = ticker.fast_info
@@ -435,7 +419,6 @@ def add_position():
 
     with portfolio_lock:
         if symbol in portfolio:
-            # Weighted average cost
             existing = portfolio[symbol]
             total_shares = existing["shares"] + shares
             new_avg = (existing["shares"] * existing["avg_cost"] + shares * avg_cost) / total_shares
@@ -464,10 +447,49 @@ def remove_position(symbol):
     return "", 204
 
 
-# ── News & Events ─────────────────────────────────────────────────────────────
+# ── News & Events ────────────────────────────────────────────────────────────────
 
 def _parse_symbols(args_str):
     return [s.strip().upper() for s in args_str.split(",") if s.strip()]
+
+
+def _parse_news_item(item, symbol):
+    """Handle both yfinance <1.x (old) and 1.x (new content-wrapped) formats."""
+    if "content" in item:
+        c = item["content"]
+        title = c.get("title", "")
+        publisher = (c.get("provider") or {}).get("displayName", "")
+        link = (c.get("canonicalUrl") or {}).get("url", "") or (c.get("clickThroughUrl") or {}).get("url", "")
+        pub_date = c.get("pubDate", "")
+        try:
+            dt = datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
+            published_at = int(dt.timestamp())
+        except Exception:
+            published_at = 0
+        thumb = None
+        tn = c.get("thumbnail") or {}
+        for res in tn.get("resolutions", []):
+            if res.get("url"):
+                thumb = res["url"]
+                break
+        if not thumb and tn.get("originalUrl"):
+            thumb = tn["originalUrl"]
+    else:
+        title = item.get("title", "")
+        publisher = item.get("publisher", "")
+        link = item.get("link", "")
+        published_at = item.get("providerPublishTime", 0)
+        thumb = None
+        tn = item.get("thumbnail") or {}
+        for res in tn.get("resolutions", []):
+            if res.get("url"):
+                thumb = res["url"]
+                break
+
+    if not title:
+        return None
+    return {"symbol": symbol, "title": title, "publisher": publisher,
+            "link": link, "published_at": published_at, "thumbnail": thumb}
 
 
 @app.route("/api/news")
@@ -481,19 +503,9 @@ def get_news():
         try:
             ticker = yf.Ticker(symbol)
             for item in (ticker.news or [])[:6]:
-                thumb = None
-                if item.get("thumbnail"):
-                    res = item["thumbnail"].get("resolutions", [])
-                    if res:
-                        thumb = res[0].get("url")
-                all_news.append({
-                    "symbol": symbol,
-                    "title": item.get("title", ""),
-                    "publisher": item.get("publisher", ""),
-                    "link": item.get("link", ""),
-                    "published_at": item.get("providerPublishTime", 0),
-                    "thumbnail": thumb,
-                })
+                parsed = _parse_news_item(item, symbol)
+                if parsed:
+                    all_news.append(parsed)
         except Exception:
             pass
 
