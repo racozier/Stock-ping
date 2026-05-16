@@ -3,8 +3,6 @@ import uuid
 import threading
 from datetime import datetime, timedelta
 
-import pandas as pd
-
 import numpy as np
 import yfinance as yf
 from flask import Flask, request, jsonify, render_template
@@ -608,8 +606,8 @@ def get_insider():
                     "insider": str(row.get("Insider Trading", "")),
                     "position": str(row.get("Position", "")),
                     "date": str(row.get("Start Date", "")),
-                    "shares": int(shares) if pd.notna(shares) else None,
-                    "value": float(value) if pd.notna(value) else None,
+                    "shares": int(shares) if shares is not None and str(shares) != 'nan' else None,
+                    "value": float(value) if value is not None and str(value) != 'nan' else None,
                     "text": str(row.get("Text", "")),
                 })
         except Exception:
