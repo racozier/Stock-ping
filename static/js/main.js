@@ -866,3 +866,196 @@ function showToast(message, type = "info") {
     toast.show();
     div.addEventListener("hidden.bs.toast", () => div.remove());
 }
+
+// ── News & Events ─────────────────────────────────────────────────────────────
+
+let newsLoaded = false;
+
+function onNewsTabOpen() {
+    if (!newsLoaded) refreshNews();
+}
+
+function refreshNews() {
+    const symbols = watchlist.join(",");
+    if (!symbols) {
+        const feed = document.getElementById("newsFeed");
+        feed.innerHTML = '<div class="text-muted p-4 text-center">Add stocks to your watchlist first.</div>';
+        return;
+    }
+    newsLoaded = true;
+    loadNewsFeed(symbols);
+    loadEarnings(symbols);
+    loadAnalyst(symbols);
+    loadInsider(symbols);
+    loadOptionsActivity(symbols);
+}
+
+async function loadNewsFeed(symbols) {
+    const feed = document.getElementById("newsFeed");
+    const count = document.getElementById("newsCount");
+    feed.innerHTML = '<div class="text-center text-muted p-4"><div class="spinner-border spinner-border-sm me-2"></div>Loading news…</div>';
+    try {
+        const res = await fetch(`/api/news?symbols=${symbols}`);
+        const items = await res.json();
+        count.textContent = items.length + " articles";
+        if (!items.length) {
+            feed.innerHTML = '<div class="text-muted p-4 text-center">No news found.</div>';
+            return;
+        }
+        feed.innerHTML = items.map(item => {
+            const t = new Date(item.published_at * 1000);
+            const ago = formatAgo(item.published_at);
+            const thumb = item.thumbnail
+                ? `<img src="${item.thumbnail}" alt="" class="news-thumb flex-shrink-0" onerror="this.style.display='none'">`
+                : `<div class="news-thumb-placeholder flex-shrink-0"></div>`;
+            return `
+                <a href="${escHtml(item.link)}" target="_blank" rel="noopener noreferrer"
+                   class="news-item d-flex gap-3 p-3 border-bottom text-decoration-none text-body">
+                    ${thumb}
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                            <span class="badge bg-primary">${escHtml(item.symbol)}</span>
+                            <small class="text-muted">${escHtml(item.publisher)}</small>
+                            <small class="text-muted ms-auto text-nowrap">${ago}</small>
+                        </div>
+                        <div class="news-title">${escHtml(item.title)}</div>
+                    </div>
+                </a>`;
+        }).join("");
+    } catch (e) {
+        feed.innerHTML = '<div class="text-danger p-3">Failed to load news.</div>';
+    }
+}
+
+async function loadEarnings(symbols) {
+    const tbody = document.getElementById("earningsBody");
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+    try {
+        const res = await fetch(`/api/earnings?symbols=${symbols}`);
+        const items = await res.json();
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center p-3">No upcoming earnings found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = items.map(item => {
+            const d = item.earnings_date ? new Date(item.earnings_date).toLocaleDateString() : "—";
+            const eps = item.eps_estimate != null ? "$" + item.eps_estimate.toFixed(2) : "—";
+            const rev = item.revenue_estimate != null ? fmtLarge(item.revenue_estimate) : "—";
+            return `<tr>
+                <td><span class="badge bg-dark font-monospace">${escHtml(item.symbol)}</span></td>
+                <td class="fw-semibold">${d}</td>
+                <td>${eps}</td>
+                <td class="text-muted">${rev}</td>
+            </tr>`;
+        }).join("");
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-danger p-2">Load failed.</td></tr>';
+    }
+}
+
+async function loadAnalyst(symbols) {
+    const tbody = document.getElementById("analystBody");
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+    try {
+        const res = await fetch(`/api/analyst?symbols=${symbols}`);
+        const items = await res.json();
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center p-3">No recent analyst changes.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = items.map(item => {
+            const actionColor = {upgrade: "success", downgrade: "danger", init: "primary", reit: "secondary"}[item.action.toLowerCase()] || "secondary";
+            const arrow = item.from_grade && item.to_grade
+                ? `<span class="text-muted small">${escHtml(item.from_grade)}</span> → <strong>${escHtml(item.to_grade)}</strong>`
+                : `<strong>${escHtml(item.to_grade || item.from_grade)}</strong>`;
+            return `<tr>
+                <td><span class="badge bg-dark font-monospace">${escHtml(item.symbol)}</span></td>
+                <td class="small">${escHtml(item.firm)}</td>
+                <td class="small">${arrow} <span class="badge bg-${actionColor} ms-1">${escHtml(item.action)}</span></td>
+                <td class="text-muted small text-nowrap">${item.date}</td>
+            </tr>`;
+        }).join("");
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-danger p-2">Load failed.</td></tr>';
+    }
+}
+
+async function loadInsider(symbols) {
+    const tbody = document.getElementById("insiderBody");
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+    try {
+        const res = await fetch(`/api/insider?symbols=${symbols}`);
+        const items = await res.json();
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center p-3">No insider transactions found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = items.map(item => {
+            const isBuy = item.text && item.text.toLowerCase().includes("purchase");
+            const color = isBuy ? "text-success" : "text-danger";
+            const icon = isBuy ? "▲" : "▼";
+            const shares = item.shares != null ? item.shares.toLocaleString() : "—";
+            const val = item.value != null ? "$" + fmtLarge(item.value) : "—";
+            return `<tr>
+                <td><span class="badge bg-dark font-monospace">${escHtml(item.symbol)}</span></td>
+                <td class="small">${escHtml(item.insider)}</td>
+                <td class="text-muted small">${escHtml(item.position)}</td>
+                <td class="${color} small fw-semibold">${icon} ${shares}</td>
+                <td class="small">${val}</td>
+                <td class="text-muted small text-nowrap">${escHtml(item.date)}</td>
+            </tr>`;
+        }).join("");
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-danger p-2">Load failed.</td></tr>';
+    }
+}
+
+async function loadOptionsActivity(symbols) {
+    const tbody = document.getElementById("optionsBody");
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+    try {
+        const res = await fetch(`/api/options-activity?symbols=${symbols}`);
+        const items = await res.json();
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center p-3">No unusual options found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = items.map(item => {
+            const typeColor = item.type === "CALL" ? "success" : "danger";
+            return `<tr>
+                <td><span class="badge bg-dark font-monospace">${escHtml(item.symbol)}</span></td>
+                <td><span class="badge bg-${typeColor}">${item.type}</span></td>
+                <td>$${item.strike.toFixed(0)}</td>
+                <td class="text-muted small">${escHtml(item.expiry)}</td>
+                <td class="fw-semibold">${item.volume.toLocaleString()}</td>
+                <td class="text-muted">${item.open_interest.toLocaleString()}</td>
+                <td class="fw-bold ${item.vol_oi_ratio >= 5 ? "text-warning" : ""}">${item.vol_oi_ratio}×</td>
+                <td class="text-muted small">${item.implied_volatility}%</td>
+            </tr>`;
+        }).join("");
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-danger p-2">Load failed.</td></tr>';
+    }
+}
+
+function formatAgo(unixTs) {
+    const diffMs = Date.now() - unixTs * 1000;
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return mins + "m ago";
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + "h ago";
+    return Math.floor(hrs / 24) + "d ago";
+}
+
+function fmtLarge(n) {
+    if (n == null) return "—";
+    if (Math.abs(n) >= 1e12) return (n / 1e12).toFixed(1) + "T";
+    if (Math.abs(n) >= 1e9)  return (n / 1e9).toFixed(1) + "B";
+    if (Math.abs(n) >= 1e6)  return (n / 1e6).toFixed(1) + "M";
+    return n.toLocaleString();
+}
+
+function escHtml(str) {
+    if (!str) return "";
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}

@@ -1,7 +1,9 @@
 import os
 import uuid
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
+
+import pandas as pd
 
 import numpy as np
 import yfinance as yf
@@ -460,6 +462,166 @@ def remove_position(symbol):
             return jsonify({"error": "Not found"}), 404
         del portfolio[symbol]
     return "", 204
+
+
+# ── News & Events ─────────────────────────────────────────────────────────────
+
+def _parse_symbols(args_str):
+    return [s.strip().upper() for s in args_str.split(",") if s.strip()]
+
+
+@app.route("/api/news")
+def get_news():
+    symbols = _parse_symbols(request.args.get("symbols", ""))
+    if not symbols:
+        return jsonify([])
+
+    all_news = []
+    for symbol in symbols[:15]:
+        try:
+            ticker = yf.Ticker(symbol)
+            for item in (ticker.news or [])[:6]:
+                thumb = None
+                if item.get("thumbnail"):
+                    res = item["thumbnail"].get("resolutions", [])
+                    if res:
+                        thumb = res[0].get("url")
+                all_news.append({
+                    "symbol": symbol,
+                    "title": item.get("title", ""),
+                    "publisher": item.get("publisher", ""),
+                    "link": item.get("link", ""),
+                    "published_at": item.get("providerPublishTime", 0),
+                    "thumbnail": thumb,
+                })
+        except Exception:
+            pass
+
+    all_news.sort(key=lambda x: x["published_at"], reverse=True)
+    return jsonify(all_news)
+
+
+@app.route("/api/earnings")
+def get_earnings():
+    symbols = _parse_symbols(request.args.get("symbols", ""))
+    results = []
+    for symbol in symbols[:15]:
+        try:
+            ticker = yf.Ticker(symbol)
+            cal = ticker.calendar
+            if not cal:
+                continue
+            dates = cal.get("Earnings Date", [])
+            if not dates:
+                continue
+            name = ticker.info.get("shortName", symbol)
+            eps_list = cal.get("EPS Estimate", [])
+            rev_list = cal.get("Revenue Estimate", [])
+            results.append({
+                "symbol": symbol,
+                "name": name,
+                "earnings_date": dates[0].isoformat() if dates else None,
+                "eps_estimate": float(eps_list[0]) if eps_list and eps_list[0] is not None else None,
+                "revenue_estimate": float(rev_list[0]) if rev_list and rev_list[0] is not None else None,
+            })
+        except Exception:
+            pass
+
+    results.sort(key=lambda x: x["earnings_date"] or "9999")
+    return jsonify(results)
+
+
+@app.route("/api/analyst")
+def get_analyst():
+    symbols = _parse_symbols(request.args.get("symbols", ""))
+    results = []
+    cutoff = datetime.now() - timedelta(days=90)
+    for symbol in symbols[:15]:
+        try:
+            ticker = yf.Ticker(symbol)
+            df = ticker.upgrades_downgrades
+            if df is None or df.empty:
+                continue
+            recent = df[df.index >= cutoff].head(8)
+            for date, row in recent.iterrows():
+                results.append({
+                    "symbol": symbol,
+                    "date": date.strftime("%Y-%m-%d"),
+                    "firm": str(row.get("Firm", "")),
+                    "from_grade": str(row.get("FromGrade", "")),
+                    "to_grade": str(row.get("ToGrade", "")),
+                    "action": str(row.get("Action", "")),
+                })
+        except Exception:
+            pass
+
+    results.sort(key=lambda x: x["date"], reverse=True)
+    return jsonify(results[:60])
+
+
+@app.route("/api/insider")
+def get_insider():
+    symbols = _parse_symbols(request.args.get("symbols", ""))
+    results = []
+    for symbol in symbols[:10]:
+        try:
+            ticker = yf.Ticker(symbol)
+            df = ticker.insider_transactions
+            if df is None or df.empty:
+                continue
+            for _, row in df.head(8).iterrows():
+                shares = row.get("Shares")
+                value = row.get("Value")
+                results.append({
+                    "symbol": symbol,
+                    "insider": str(row.get("Insider Trading", "")),
+                    "position": str(row.get("Position", "")),
+                    "date": str(row.get("Start Date", "")),
+                    "shares": int(shares) if pd.notna(shares) else None,
+                    "value": float(value) if pd.notna(value) else None,
+                    "text": str(row.get("Text", "")),
+                })
+        except Exception:
+            pass
+
+    return jsonify(results[:50])
+
+
+@app.route("/api/options-activity")
+def get_options_activity():
+    symbols = _parse_symbols(request.args.get("symbols", ""))
+    results = []
+    for symbol in symbols[:5]:
+        try:
+            ticker = yf.Ticker(symbol)
+            expirations = ticker.options
+            if not expirations:
+                continue
+            for expiry in expirations[:2]:
+                chain = ticker.option_chain(expiry)
+                for opt_type, df in [("CALL", chain.calls), ("PUT", chain.puts)]:
+                    df = df.copy()
+                    df = df[df["volume"] > 50]
+                    oi = df["openInterest"].replace(0, 1)
+                    df["ratio"] = df["volume"] / oi
+                    unusual = df[df["ratio"] > 1.5].nlargest(3, "volume")
+                    for _, row in unusual.iterrows():
+                        results.append({
+                            "symbol": symbol,
+                            "type": opt_type,
+                            "strike": float(row["strike"]),
+                            "expiry": expiry,
+                            "volume": int(row["volume"]),
+                            "open_interest": int(row["openInterest"]),
+                            "vol_oi_ratio": round(float(row["ratio"]), 1),
+                            "last_price": float(row["lastPrice"]),
+                            "implied_volatility": round(float(row.get("impliedVolatility", 0)) * 100, 1),
+                        })
+        except Exception:
+            pass
+
+    results.sort(key=lambda x: x["volume"], reverse=True)
+    return jsonify(results[:30])
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────

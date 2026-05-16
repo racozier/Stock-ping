@@ -146,3 +146,46 @@ th.sortable:hover {
 #mainTabs .nav-link.active {
     font-weight: 700;
 }
+
+/* News feed */
+.news-item {
+    transition: background-color 0.15s;
+}
+
+.news-item:hover {
+    background-color: #f8f9fa;
+}
+
+.news-item:last-child {
+    border-bottom: none !important;
+}
+
+.news-thumb {
+    width: 72px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #e9ecef;
+}
+
+.news-thumb-placeholder {
+    width: 72px;
+    height: 56px;
+    border-radius: 6px;
+    background: #e9ecef;
+    flex-shrink: 0;
+}
+
+.news-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.min-width-0 {
+    min-width: 0;
+}
